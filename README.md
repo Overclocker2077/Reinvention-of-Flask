@@ -5,5 +5,5 @@ Features include
   - Server-side sessions data
   - Blueprints
   - Parallel connection handler
-  - Manualy adjust HOST & PORT
+  - Manually adjust HOST & PORT
   
