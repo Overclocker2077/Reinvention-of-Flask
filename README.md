@@ -1,5 +1,5 @@
 # Simple Reinvention-of-Flask
-Functions the same as the python Flask framework with similar features.   
+http_server2 functions the same as the python Flask framework with similar features.   
 
 Features include 
   - Server-side sessions data
