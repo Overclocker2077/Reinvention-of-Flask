@@ -1,0 +1,4 @@
+socket
+threading
+bs4
+json
