@@ -4,6 +4,7 @@ http_server2 functions the same as the python Flask framework with similar featu
 Features include 
   - Server-side sessions data
   - Blueprints
+  - Redirects
   - Parallel connection handler
   - Manually adjust HOST & PORT
   
