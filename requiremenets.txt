@@ -2,3 +2,5 @@ socket
 threading
 bs4
 json
+keyboard
+sys
