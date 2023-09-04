@@ -7,4 +7,4 @@ Features include
   - Redirects
   - Parallel connection handler
   - Manually adjust HOST & PORT
-  
+  - Can be used to deploy web applications
