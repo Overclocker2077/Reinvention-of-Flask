@@ -1,8 +1,19 @@
 from functions import * 
 import socket
-import threading
+import threading  
+import keyboard # For closing the program
+import sys # For closing the program
 
 static_routes = []
+conn = None
+
+def cleanup():
+    keyboard.wait("e")
+    print("Closing HTTP Server")
+    try:
+        conn.close()
+    except: print("Couldn't close server properly")
+    sys.exit(1)
 
 class Color:  # Colors for print function
     RED = '\033[91m'
@@ -20,7 +31,7 @@ class http_server():
         self.session = session
 
     # Return status code template data and file type
-    def render_template(file_path, content_type = "text/html", custom_headers="" ):
+    def render_template(self, file_path, content_type = "text/html", custom_headers="" ):
         status_code, template_data = read_file(file_path)
 
         # # Create routes for css, js and images
@@ -28,7 +39,9 @@ class http_server():
         tag_list = [html_parser.find_all("link"), html_parser.find_all("script"), html_parser.find_all("img")]
         for tags in tag_list:
             for tag in tags:
-                static_routes.append(tag.get("src"))  # Route, function to retrieve data
+                if not ("/"+tag.get("src") in static_routes):
+                    static_routes.append("/"+tag.get("src"))  # Route, function to retrieve data
+
         return (template_data, status_code, content_type, custom_headers)
 
     def route(self, route):   # Decorator function
@@ -43,28 +56,28 @@ class http_server():
         conn.listen()
         while True:
             try:
-                print(f"Waiting for incoming connections at http://{self.HOST}:{self.PORT}")
+                print(f"http://{self.HOST}:{self.PORT}")
                 conn_socket, addr = conn.accept()
                 for addrs in addr_list:
                     if addrs == addr:
                         conn.close() 
                 addr_list.append(addr)
-                print(addr)
                 # connection_hander(conn_socket, web_pages)
                 # thread conntion handler  
                 threading.Thread(target=connection_handler, args=(
                                 conn_socket, 
                                 self.routes,
+                                self.static_folder,
                                 self.session,
-                                static_routes,
                                 self.HOST,
                                 self.PORT,
-                                self.log_user_data)
+                                self.log_user_data),
+                                daemon=True
                                 ).start()   
+                
             except KeyboardInterrupt:
                 print("Server Closing.")
-                conn.close()
-                quit()
+                cleanup()
     
     def register_blueprints(self, *blueprints):
         for blueprint in blueprints:
@@ -72,18 +85,17 @@ class http_server():
                 self.routes[route] = func
 
 class connection_handler():
-    def __init__(self, conn_socket, routes, session, static_routes, HOST="127.0.0.1", PORT=5000, log_user_data=False):
+    def __init__(self, conn_socket, routes, static_folder, session, HOST="127.0.0.1", PORT=5000, log_user_data=False):
         self.conn_socket = conn_socket
         self.routes = routes  # store routes
+        self.static_folder = static_folder
         self.HOST = HOST 
         self.PORT = PORT 
         self.session = session
         self.log_user_data = log_user_data
         
         #### Run the receive_http and send_http  ###
-        print("Client: ", self.conn_socket)
-        print("Routes: ", self.routes)
-
+        
         self.receive_http()
         
 
@@ -92,10 +104,11 @@ class connection_handler():
         request = self.conn_socket.recv(2048).decode()
         # Parse the requests 
         request_details = parser(request)
-        print(request_details)
+        print(Color.YELLOW, f"{request_details[1]}",  Color.RESET)
 
         # Send response
-        self.send_http(request_details=request_details)
+        if request_details != None:
+            self.send_http(request_details=request_details)
 
 
         # self.send_http(data="404 NOT FOUND", Content_Type="text/plain")
@@ -106,7 +119,6 @@ class connection_handler():
         # for route, function in self.routes.items():
         #     if request_details[1] == route:
         #         output = function()
-        print("\n\n Routes:", self.routes)
         custom_headers = ""
         output = ""
         content_type = "text/plain"
@@ -115,19 +127,22 @@ class connection_handler():
             output = self.routes[request_details[1]]()  # output is either tuple or response data
         
         elif request_details[1] in static_routes:
-            output = static_file(static_routes.get(request_details[1]))   # output is either tuple or response data
+            output = static_file(request_details[1], self.static_folder)   # output is either tuple or response data
             
-        if ("tuple" in str(type(output))):
+        # if ("tuple" in str(type(output))):
+        if type(output) != type(tuple()):
+            data = output
+            status = 200
+        else:
             data = output[0]
             status = output[1]
             content_type = output[2]
             custom_headers = output[3]   # Custom headers should be a dictionary
-        elif output != "":
-            data = output
-            status = 200
-        else:
-            data = "404 File Not Found"
-            status = 404
+        
+        print(f"{request_details[0]}: {request_details[1]}: {status}")
+        # else:
+        #     data = "404 File Not Found"
+        #     status = 404
             
         # except:
         #     data = f"500 internal server error \n\n {request_details}"
@@ -143,16 +158,15 @@ class connection_handler():
             # "X-Custom-Header": "Custom Value",
         }
 
-        merge(custom_headers, response_parameters)  # Updates the response_parameters with custom_headers
+        # merge(custom_headers, response_parameters)  # Updates the response_parameters with custom_headers
         
         response = make_request(**response_parameters)
         
-        self.conn_socket.send(response.encode())
+        self.conn_socket.send(response)
 
         
     def log_data(self):
         ...
-
 
 # app = http_server()
 
