@@ -52,34 +52,33 @@ def encode_url(data):
     return "".join(data)
 
 def parser(requests):    # The parser will convert the HTTP requests into a python dictionary
-    print(f"Requests:{requests}:::")
-    req_dict = {}
-    split_line = requests.replace("\r", "").split("\n")
-    # This part parsers the status line 
-    status_line = split_line[0]
-    # print(split_line[0])
-    status_line_list = status_line.split(" ")
-    # HTTP Method 
-    # print(f"Status_line:  {status_line_list}")
-    request_method = status_line_list[0]
-    endPoint_PATH = status_line_list[1]
-    protocol_version = status_line_list[2]
+    if requests != "":
+        req_dict = {}
+        split_line = requests.replace("\r", "").split("\n")
+        # This part parsers the status line 
+        status_line = split_line[0]
+        # print(split_line[0])
+        status_line_list = status_line.split(" ")
+        # HTTP Method 
+        # print(f"Status_line:  {status_line_list}")
+        request_method = status_line_list[0]
+        endPoint_PATH = status_line_list[1]
+        protocol_version = status_line_list[2]
 
-    for i in range(len(split_line)):
-        if i != 0 and ":" in split_line[i]:
-            split = split_line[i].split(":")
-            req_dict[split[0]] = split[1]
-    data = split_line[len(split_line)-1]
+        for i in range(len(split_line)):
+            if i != 0 and ":" in split_line[i]:
+                split = split_line[i].split(":")
+                req_dict[split[0]] = split[1]
+        data = split_line[len(split_line)-1]
 
-    return [request_method, endPoint_PATH, protocol_version, req_dict, data]  # return list(requests_type, requests_file, protocol_version,  dict{requests_headers}, data)
+        return [request_method, endPoint_PATH, protocol_version, req_dict, data]  # return list(requests_type, requests_file, protocol_version,  dict{requests_headers}, data)
+    return None
 
 def formData_parser(requests):
-    print(requests)
     form_data = {}
     requests_lines = requests.split("\n")
     form_data_split1 = requests_lines[len(requests_lines)-1].split("&")
     form_data_split2 = [data.split("=") for data in form_data_split1]
-    print(form_data_split1, form_data_split2)
     for i in range(len(form_data_split2)):
         form_data[form_data_split2[i][0]] = decode_url(form_data_split2[i][1])
     return form_data
@@ -94,16 +93,25 @@ def json_parser(requests):  # JSON parser for requests
             break
     return json.loads("".join(requests_lines[start_line:]))
 
-content_types = ["text/html", "text/css", "video/mp4", "image/png", "application/javascript", "application/json"]
+content_types_dict = {
+                      "html": "text/html", 
+                      "css": "text/css", 
+                      "mp4": "video/mp4", 
+                      "png": "image/png", 
+                      "js": "application/javascript", 
+                      "json": "application/json",
+                      "jpg": "image/jpeg",
+                      "jpeg": "image/jpeg"
+                      }
 
 def file_type(file_name):  # returns Content-Types for file
-    for i in range(len(content_types)):
-        con = content_types[i].split("/")
-        if con[1] in file_name or ("js" in file_name and con[1] == "javascript"):
-            return content_types[i]
-        
-    print("Unsupported content type")
-    return "text/plain"  # "Unsupported content type"
+    file_extension = file_name.split(".")[1]
+    for key, value in content_types_dict.items():
+        if key == file_extension:
+            return value
+    
+    print("Unsupported file type")
+    return "text/plain"
 
 # wip
 def process_json(json_data):
@@ -136,6 +144,8 @@ def make_request(**kwargs):
     # host = kwargs.get("Host")
     # content_type = kwargs.get("Content_Type")
     content = ["" if kwargs.get("Content") == None else kwargs.get("Content")][0]
+    if not ("bytes" in str(type(content))) and content != None:
+        content = content.encode()
     r_type = kwargs.get("Type") # http type 
     connection = ["keep-alive" if kwargs.get("Connection") == None else kwargs.get("Connection")][0]
     method = kwargs.get("Method")
@@ -159,9 +169,8 @@ def make_request(**kwargs):
         status_line = f"{version} {status_code}"
         if status_code == 200: status_line = status_line+" OK"
     if r_type == "Request": status_line = f"{method} {route} {version}"
-    if content == None: content=""
-    print(f"Content: {content}")
-    return status_line+"\n"+process_json(headers)+"\n"+content
+    if content == None: content=b""
+    return status_line.encode()+b"\n"+process_json(headers).encode()+b"\n"+content
 
 def read_file(file_path):
     try:
@@ -178,7 +187,7 @@ def readb(file_path):
         with open(file_path, "rb") as file:
             return "200", file.read()
     except:  
-        return "404", "FILE NOT FOUND"
+        return ("FILE NOT FOUND", "404")
     
 static_routes = []
 
@@ -199,13 +208,12 @@ def render_template(file_path, content_type = "text/html"):
 # render_template("templates/index.html")
 
 # Return Status code static bytes data and file type
-def static_file(file_path):
+def static_file(file_name, static_folder):
     try:
-        with open(file_path, "rb") as file:
-            split_path = file_path.split("/")
-            return file.read(), 200, file_type(split_path[len(split_path)-1])  # Data, status_code, content_type
+        with open(f"{static_folder}/{file_name}", "rb") as file:
+            return (file.read(), 200, file_type(file_name), "")  # Data, status_code, content_type
     except FileNotFoundError:
-        return 404, "404 File Not Found", "text/plain"
+        return (f"404 File Not Found {static_folder}/{file_name}", 404, "text/plain", "")
 
 
 # Blueprint for import routes to other files  
