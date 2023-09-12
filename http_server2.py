@@ -18,11 +18,11 @@ def cleanup():
 class Color:  # Colors for print function
     RED = '\033[91m'
     GREEN = '\033[92m'
-    YELLOW = '\033[93m'
+    YELLOW = '\033[94m'
     RESET = '\033[0m'
 
 class http_server():
-    def __init__(self, HOST="127.0.0.1", PORT=80, static_folder="static", log_user_data=False, session=False):
+    def __init__(self, HOST="127.0.0.1", PORT=5000, static_folder="static", log_user_data=False, session=False):
         self.routes = {}
         self.HOST = HOST
         self.PORT = PORT
@@ -31,16 +31,20 @@ class http_server():
         self.session = session
 
     # Return status code template data and file type
-    def render_template(self, file_path, content_type = "text/html", custom_headers="" ):
+    def render_template(self, file_path, content_type = None, custom_headers="" ):
         status_code, template_data = read_file(file_path)
+        
+        if content_type == None:
+            content_type = file_type(file_path)
 
         # # Create routes for css, js and images
-        html_parser = BeautifulSoup(template_data, "html.parser")
-        tag_list = [html_parser.find_all("link"), html_parser.find_all("script"), html_parser.find_all("img")]
-        for tags in tag_list:
-            for tag in tags:
-                if not ("/"+tag.get("src") in static_routes):
-                    static_routes.append("/"+tag.get("src"))  # Route, function to retrieve data
+        if content_type == "text/html":
+            html_parser = BeautifulSoup(template_data, "html.parser")
+            tag_list = [html_parser.find_all("link"), html_parser.find_all("script"), html_parser.find_all("img")]
+            for tags in tag_list:
+                for tag in tags:
+                    if not ("/"+tag.get("src") in static_routes):
+                        static_routes.append("/"+tag.get("src"))  # Route, function to retrieve data
 
         return (template_data, status_code, content_type, custom_headers)
 
@@ -53,19 +57,20 @@ class http_server():
         addr_list = [] 
         conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         conn.bind((self.HOST, self.PORT))
+        print(f"http://{self.HOST}:{self.PORT}")
         conn.listen()
         while True:
             try:
-                print(f"http://{self.HOST}:{self.PORT}")
-                conn_socket, addr = conn.accept()
+                conn_socket, self.addr = conn.accept()
                 for addrs in addr_list:
-                    if addrs == addr:
+                    if addrs == self.addr:
                         conn.close() 
-                addr_list.append(addr)
+                addr_list.append(self.addr)
                 # connection_hander(conn_socket, web_pages)
                 # thread conntion handler  
                 threading.Thread(target=connection_handler, args=(
                                 conn_socket, 
+                                self.addr,
                                 self.routes,
                                 self.static_folder,
                                 self.session,
@@ -85,7 +90,7 @@ class http_server():
                 self.routes[route] = func
 
 class connection_handler():
-    def __init__(self, conn_socket, routes, static_folder, session, HOST="127.0.0.1", PORT=5000, log_user_data=False):
+    def __init__(self, conn_socket, addr,  routes, static_folder, session, HOST="127.0.0.1", PORT=5000, log_user_data=False):
         self.conn_socket = conn_socket
         self.routes = routes  # store routes
         self.static_folder = static_folder
@@ -93,6 +98,7 @@ class connection_handler():
         self.PORT = PORT 
         self.session = session
         self.log_user_data = log_user_data
+        self.addr = addr
         
         #### Run the receive_http and send_http  ###
         
@@ -103,16 +109,15 @@ class connection_handler():
         # Receive requests
         request = self.conn_socket.recv(2048).decode()
         # Parse the requests 
+        global request_details
         request_details = parser(request)
+
         print(Color.YELLOW, f"{request_details[1]}",  Color.RESET)
 
         # Send response
         if request_details != None:
             self.send_http(request_details=request_details)
 
-
-        # self.send_http(data="404 NOT FOUND", Content_Type="text/plain")
-        # print(f"{Color.RED}404 NOT FOUND{Color.RESET}")
 
     # SEND HTTP RESPONSE
     def send_http(self, request_details):  # response   
@@ -124,10 +129,16 @@ class connection_handler():
         content_type = "text/plain"
         # try:
         if self.routes.get(request_details[1]):
-            output = self.routes[request_details[1]]()  # output is either tuple or response data
+            try:
+                output = self.routes[request_details[1]](**{"request": request_details})
+            except:
+                output = self.routes[request_details[1]]()  # output is either tuple or response data
         
         elif request_details[1] in static_routes:
             output = static_file(request_details[1], self.static_folder)   # output is either tuple or response data
+        
+        else:
+            output = ("500 internal server error \nroute failed to load", 500, "text/plain", "")
             
         # if ("tuple" in str(type(output))):
         if type(output) != type(tuple()):
@@ -138,12 +149,10 @@ class connection_handler():
             status = output[1]
             content_type = output[2]
             custom_headers = output[3]   # Custom headers should be a dictionary
-        
+
+                    
         print(f"{request_details[0]}: {request_details[1]}: {status}")
-        # else:
-        #     data = "404 File Not Found"
-        #     status = 404
-            
+
         # except:
         #     data = f"500 internal server error \n\n {request_details}"
         #     status = "500"
